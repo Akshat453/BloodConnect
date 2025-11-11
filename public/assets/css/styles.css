@@ -414,3 +414,25 @@ textarea:focus {
     font-weight: 700;
 }
 
+/* Align the availability checkbox nicely with the input row */
+.checkbox-inline {
+    display: flex;
+    align-items: center;
+    /* vertical center */
+    gap: 8px;
+    min-width: 220px;
+}
+
+/* Push it down a touch so it lines up with text inputs’ labels/fields */
+.checkbox-inline .inline {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 32px;
+    /* tweak 28–36px to taste depending on your input height */
+}
+
+/* Make the whole label clickable */
+.checkbox-inline input[type="checkbox"] {
+    margin: 0;
+}

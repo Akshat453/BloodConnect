@@ -2,24 +2,20 @@
 require_once __DIR__ . '/../partials/header.php';
 require_once __DIR__ . '/../app/db.php';
 
-// --- Safe stats + recent requests (works even if table doesn't exist) ---
 $stats = ['donors'=>0,'cities'=>0,'requests'=>0];
 $recent = [];
 try {
   $pdo = db();
-  // total approved donors
-  $stats['donors'] = (int)$pdo->query("SELECT COUNT(*) c FROM donors WHERE is_approved=1")->fetch()['c'];
-  // distinct cities with approved donors
-  $stats['cities']  = (int)$pdo->query("SELECT COUNT(DISTINCT city) c FROM donors WHERE is_approved=1")->fetch()['c'];
-  // open requests (if table exists)
-  try {
-    $stats['requests'] = (int)$pdo->query("SELECT COUNT(*) c FROM requests WHERE status='open'")->fetch()['c'];
-    $st = $pdo->query("SELECT id, patient_name, blood_group, city, urgency, units, created_at
-                       FROM requests WHERE status='open'
-                       ORDER BY created_at DESC LIMIT 5");
-    $recent = $st->fetchAll();
-  } catch (Throwable $e) { /* requests table may not exist yet */ }
-} catch (Throwable $e) { /* DB not ready */ }
+  // counts (no approval gate)
+  $stats['donors'] = (int)$pdo->query("SELECT COUNT(*) c FROM donors")->fetch()['c'];
+  $stats['cities']  = (int)$pdo->query("SELECT COUNT(DISTINCT city) c FROM donors")->fetch()['c'];
+  $stats['requests'] = (int)$pdo->query("SELECT COUNT(*) c FROM requests WHERE status='open'")->fetch()['c'];
+
+  $st = $pdo->query("SELECT id, patient_name, blood_group, city, urgency, units, created_at
+                     FROM requests WHERE status='open'
+                     ORDER BY created_at DESC LIMIT 5");
+  $recent = $st->fetchAll();
+} catch (Throwable $e) { /* DB not ready or tables missing */ }
 ?>
 
 <!-- Hero -->
@@ -60,7 +56,7 @@ try {
 <section class="grid mt">
   <div class="stat card">
     <div class="stat-num"><?= e($stats['donors']) ?></div>
-    <div class="stat-label">Approved Donors</div>
+    <div class="stat-label">Donors</div>
   </div>
   <div class="stat card">
     <div class="stat-num"><?= e($stats['cities']) ?></div>
@@ -72,7 +68,7 @@ try {
   </div>
 </section>
 
-<!-- Features -->
+<!-- ⭐️ Features (restored) -->
 <section class="grid mt">
   <div class="feature card">
     <h4>Fast Search</h4>
@@ -88,7 +84,7 @@ try {
   </div>
 </section>
 
-<!-- Recent requests (only if we fetched any) -->
+<!-- Recent requests -->
 <?php if (!empty($recent)): ?>
 <section class="card mt">
   <h3 class="section-title">Recent Requests</h3>
