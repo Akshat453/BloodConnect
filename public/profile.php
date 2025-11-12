@@ -5,10 +5,9 @@ require_once __DIR__ . '/../app/csrf.php';
 require_once __DIR__ . '/../app/auth.php';
 
 require_login();
-$u   = user();          // session snapshot
+$u   = user();
 $pdo = db();
 
-// (optional) pull fresh user row for the latest name from DB
 try {
     $st = $pdo->prepare("SELECT id, name, email, role, status FROM users WHERE id=?");
     $st->execute([$u['id']]);
@@ -16,6 +15,18 @@ try {
 } catch (Throwable $e) {
     $u_row = $u;
 }
+
+/* ----------------------------
+   Prices (same as donors.php)
+-------------------------------*/
+$valid_groups = ['A+','A-','B+','B-','O+','O-','AB+','AB-'];
+$prices = [
+  'A+' => 1500, 'A-' => 1600,
+  'B+' => 1500, 'B-' => 1600,
+  'O+' => 1400, 'O-' => 1700,
+  'AB+' => 1800, 'AB-' => 1900,
+];
+$fmt = function($n) { return '₹' . number_format((float)$n); };
 
 /* -------------------------------------------------------
    LOAD DONOR PROFILE (if user is a donor)
@@ -53,7 +64,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 if ($name !== '') {
                     $st2 = $pdo->prepare("UPDATE users SET name=? WHERE id=?");
                     $st2->execute([$name, $u_row['id']]);
-                    // keep session in sync so the header & page reflect immediately
                     $_SESSION['user']['name'] = $name;
                     $u_row['name'] = $name;
                 }
@@ -228,12 +238,11 @@ $booked = $st->fetchAll();
       </div>
 
       <div class="col checkbox-inline">
-  <label for="availability" class="inline">
-    <input id="availability" type="checkbox" name="availability" <?= $donor['availability'] ? 'checked' : '' ?>>
-    <span>Available to donate</span>
-  </label>
-</div>
-
+        <label for="availability" class="inline">
+          <input id="availability" type="checkbox" name="availability" <?= $donor['availability'] ? 'checked' : '' ?>>
+          <span>Available to donate</span>
+        </label>
+      </div>
 
       <div class="btn-col">
         <button type="submit" class="btn">Save</button>
@@ -248,37 +257,43 @@ $booked = $st->fetchAll();
   <?php if (!$open): ?>
     <p class="muted">You have no open requests.</p>
   <?php else: ?>
-    <table class="donor-table">
+    <!-- New — only change this line -->
+<table class="donor-table open-requests">
       <colgroup>
         <col style="width:28%"><col style="width:12%"><col style="width:12%"><col style="width:28%"><col style="width:20%">
       </colgroup>
       <thead>
         <tr>
-          <th>Patient</th>
-          <th>Blood</th>
-          <th>Units</th>
-          <th>City</th>
+          <th class="left">Patient</th>
+          <th class="center">Blood</th>
+          <th class="center">Units</th>
+          <th class="center">City</th>
           <th class="right">Action</th>
         </tr>
       </thead>
       <tbody>
         <?php foreach ($open as $r): ?>
           <tr>
-            <td><?= e($r['patient_name']) ?></td>
-            <td><?= e($r['blood_group']) ?></td>
-            <td><?= (int)$r['units'] ?></td>
-            <td><?= e($r['city']) ?></td>
-            <td class="right" style="display:flex; gap:8px; justify-content:flex-end;">
-              <a class="btn"
-                 href="donors.php?blood_group=<?= urlencode($r['blood_group']) ?>&request_id=<?= (int)$r['id'] ?>&patient=<?= urlencode($r['patient_name']) ?>&units=<?= (int)$r['units'] ?>">
-                 Book Now
-              </a>
-              <form method="post" onsubmit="return confirm('Delete this open request?');" style="display:inline">
-                <?php csrf_field(); ?>
-                <input type="hidden" name="action" value="delete_open_request">
-                <input type="hidden" name="request_id" value="<?= (int)$r['id'] ?>">
-                <button type="submit" class="btn btn-outline">Delete</button>
-              </form>
+            <td class="left name-cell">
+              <div class="name-main"><?= e($r['patient_name']) ?></div>
+            </td>
+            <td class="center"><?= e($r['blood_group']) ?></td>
+            <td class="center"><?= (int)$r['units'] ?></td>
+            <td class="center"><?= e($r['city']) ?></td>
+            <td class="right">
+              <div class="actions">
+                <a class="btn"
+                   href="donors.php?blood_group=<?= urlencode($r['blood_group']) ?>&request_id=<?= (int)$r['id'] ?>&patient=<?= urlencode($r['patient_name']) ?>&units=<?= (int)$r['units'] ?>">
+                   Book Now
+                </a>
+
+                <form method="post" onsubmit="return confirm('Delete this open request?');" style="margin:0">
+                  <?php csrf_field(); ?>
+                  <input type="hidden" name="action" value="delete_open_request">
+                  <input type="hidden" name="request_id" value="<?= (int)$r['id'] ?>">
+                  <button type="submit" class="btn btn-outline">Delete</button>
+                </form>
+              </div>
             </td>
           </tr>
         <?php endforeach; ?>
@@ -287,7 +302,7 @@ $booked = $st->fetchAll();
   <?php endif; ?>
 </section>
 
-<!-- Booked summary (shows person, donors, and requester name) -->
+<!-- Booked summary (shows person, donors, requester name, and amount) -->
 <section class="card mt">
   <h3 class="section-title">My Booked Requests</h3>
   <?php if (!$booked): ?>
@@ -295,36 +310,47 @@ $booked = $st->fetchAll();
   <?php else: ?>
     <table class="donor-table">
       <colgroup>
-        <col style="width:26%"><col style="width:12%"><col style="width:10%"><col style="width:32%"><col style="width:20%">
+        <col style="width:24%"><col style="width:12%"><col style="width:10%"><col style="width:24%"><col style="width:12%"><col style="width:18%">
       </colgroup>
       <thead>
         <tr>
-          <th>Patient</th>
-          <th>Blood</th>
-          <th>Units</th>
-          <th>Donors Reserved</th>
+          <th class="left">Patient</th>
+          <th class="center">Blood</th>
+          <th class="center">Units</th>
+          <th class="center">Donors Reserved</th>
+          <th class="center">Amount Paid</th>
           <th class="right">Booked At / Action</th>
         </tr>
       </thead>
       <tbody>
         <?php foreach ($booked as $b): ?>
+          <?php
+            // compute units and amount
+            $units = (int)($b['qty'] ?: $b['units']);
+            $unit_price = $prices[$b['blood_group']] ?? 0;
+            $amount = $unit_price * $units;
+          ?>
           <tr>
-            <td>
-              <?= e($b['patient_name'] ?: '—') ?><br>
-              <small class="muted">Requested by: <?= e($u_row['name']) ?></small>
+            <td class="left name-cell">
+              <div class="name-main"><?= e($b['patient_name'] ?: '—') ?></div>
+              <div><small class="muted">Requested by: <?= e($u_row['name']) ?></small></div>
             </td>
-            <td><?= e($b['blood_group']) ?></td>
-            <td><?= (int)($b['qty'] ?: $b['units']) ?></td>
-            <td><?= $b['donor_names'] ? e($b['donor_names']) : '<span class="muted">Not recorded</span>' ?></td>
+            <td class="center"><?= e($b['blood_group']) ?></td>
+            <td class="center"><?= $units ?></td>
+            <td class="center"><?= $b['donor_names'] ? e($b['donor_names']) : '<span class="muted">Not recorded</span>' ?></td>
+            <td class="center amount"><?= $fmt($amount) ?></td>
             <td class="right">
-              <div><?= e($b['created_at']) ?></div>
-              <form method="post" onsubmit="return confirm('Cancel booking and delete this request?');" style="margin-top:6px">
-                <?php csrf_field(); ?>
-                <input type="hidden" name="action" value="delete_booked_request">
-                <input type="hidden" name="booking_id" value="<?= (int)$b['booking_id'] ?>">
-                <input type="hidden" name="request_id" value="<?= (int)($b['request_id'] ?? 0) ?>">
-                <button type="submit" class="btn btn-outline">Cancel &amp; Delete</button>
-              </form>
+              <div class="actions">
+                <div class="booked-at" style="margin-right:8px; white-space:nowrap; color:#444;"><?= e($b['created_at']) ?></div>
+
+                <form method="post" onsubmit="return confirm('Cancel booking and delete this request?');" style="margin:0">
+                  <?php csrf_field(); ?>
+                  <input type="hidden" name="action" value="delete_booked_request">
+                  <input type="hidden" name="booking_id" value="<?= (int)$b['booking_id'] ?>">
+                  <input type="hidden" name="request_id" value="<?= (int)($b['request_id'] ?? 0) ?>">
+                  <button type="submit" class="btn btn-outline">Cancel &amp; Delete</button>
+                </form>
+              </div>
             </td>
           </tr>
         <?php endforeach; ?>
